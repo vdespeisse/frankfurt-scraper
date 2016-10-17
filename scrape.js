@@ -1,6 +1,6 @@
-
-
-var webpage = require("webpage")
+var d3 = require("./lib/d3v4.js")
+var webpage = require("webpage"),
+    fs = require("fs")
 
 var system = require('system');
 
@@ -15,7 +15,6 @@ var createPage = function () {
   page = webpage.create()
   page.settings.userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.106 Safari/537.36"
   page.customHeaders = {
-    // "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.106 Safari/537.36",
     "Accept-Language" : "en"}
   page.viewportSize = { width: 1440, height: 900 };
   // page.onConsoleMessage = function(msg) {
@@ -36,7 +35,7 @@ var createPage = function () {
 
   //what went wrong
   page.onResourceError = function (error) {
-      console.log(["onResourceError", JSON.stringify(error)]);
+      // console.log(["onResourceError", JSON.stringify(error)]);
   };
 
   page.onLoadStarted = function() {
@@ -109,12 +108,19 @@ extract = function() {
 
     setTimeout(function() {
       // console.log(series[0].xData)
-      console.log(JSON.stringify(xData))
-      console.log(JSON.stringify(yData))
-      console.log(xData.length)
-      console.log(yData.length)
+      var data = xData.map(function(d,i) { return [d,yData[i]]})
+
+
+      var lineArray = [];
+      data.forEach(function (infoArray, index) {
+          var line = infoArray.join(",");
+          lineArray.push(index == 0 ? "data:text/csv;charset=utf-8," + line : line);
+      });
+      var csvContent = lineArray.join("\n");
+      fs.write("output.txt", csvContent, 'w');
+
       page.render("tt.png")
-      setTimeout(phantom.exit(),6000)
+      setTimeout(phantom.exit(),10000)
     },8000)
 }
 page = createPage()

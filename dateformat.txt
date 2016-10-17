@@ -1,0 +1,2 @@
+date is in millisecond starting from some day in 1949 it hink
+to get the day => date / (24*3600*1000)
