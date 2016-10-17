@@ -1,127 +1,95 @@
-var d3 = require("./lib/d3v4.js")
-var webpage = require("webpage"),
-    fs = require("fs")
+var Nightmare = require('nightmare')
+var nightmare = Nightmare({ show: false , width : 1024, height : 800})
+var fs= require("fs")
+var _url = "http://en.boerse-frankfurt.de/"
+var _isin_list = ["FR0000121147","XS1210362239","XS1020736069"]
 
-var system = require('system');
 
+main = function(url, isin_list) {
+  var data = scrape(url, isin_list)
 
-
-var debug = false,
-    _url = "http://en.boerse-frankfurt.de/",
-    searchTerm = "mongodb vs couchdb",
-    isin = "FR0000121147"
-
-var createPage = function () {
-  page = webpage.create()
-  page.settings.userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.106 Safari/537.36"
-  page.customHeaders = {
-    "Accept-Language" : "en"}
-  page.viewportSize = { width: 1440, height: 900 };
-  // page.onConsoleMessage = function(msg) {
-  //     system.stderr.writeLine('console: ' + msg);
-  // };
-
-  //good to debug and abort request, we do not wish to invoke cause they slow things down (e.g. tons of plugins)
-  page.onResourceRequested = function (requestData, networkRequest) {
-      // console.log(["onResourceRequested", JSON.stringify(networkRequest), JSON.stringify(requestData)]);
-      //in case we do not want to invoke the request
-      //networkRequest.abort();
-  };
-
-  //what dd we get
-  page.onResourceReceived = function (response) {
-      // console.log(["onResourceReceived", JSON.stringify(response)]);
-  };
-
-  //what went wrong
-  page.onResourceError = function (error) {
-      // console.log(["onResourceError", JSON.stringify(error)]);
-  };
-
-  page.onLoadStarted = function() {
-      console.log("loading page...");
-  };
-
-  page.onLoadFinished = function(status) {
-      var currentUrl = page.evaluate(function() {
-          return window.location.href;
-      });
-      console.log("onLoadFinished", currentUrl, status);
-  };
-
-  return page;
 }
 
+writeCsv = function(data) {
+  console.log("starting writeCsv")
+  var csvData = []
 
+  csvData.push(Object.keys(data))
+  data.date.map( function(d,i) {var temp = []; Object.keys(data).map( k => temp.push(data[k][i])); csvData.push(temp)})
 
-search = function(page, url, isin) {
-  console.log("opening page...")
-  page.open(url, function () {
-     setTimeout(function () {
-
-      // form = page.evaluate( function () {
-      //   return document.getElementsByName("mmssearch")[0]
-      // } )
-
-      // input = page.evaluate( function () {
-      //   return document.getElementsByName("_search")[0]
-      // } )
-
-      page.evaluate( function () {
-        form = document.getElementsByName("mmssearch")[0]
-        input = document.getElementsByName("_search")[0]
-        input.value = "FR0000121147"
-        form.submit()
-      } )
-
-      setTimeout(function() {extract()},3000)
-
-
-
-      // input.value = isin
-      // form.submit()
-      //
-      // var series =page.evaluate(function(){
-      //   return $("#DetailChart").highcharts().series
-      // })
-    },2000)
+  var lineArray = [];
+  csvData.forEach(function (infoArray, index) {
+      var line = infoArray.join(",");
+      // lineArray.push(index == 0 ? "data:text/csv;charset=utf-8,\n" + line : line);
+      lineArray.push(line)
   })
+
+  console.log("stuff happening")
+  var csvContent = lineArray.join("\n")
+  console.log("stuff happening2")
+  fs.writeFile("output.txt", csvContent);
+
+  console.log('done')
 }
-extract = function() {
-  var next = page.evaluate(function () {
-        btn = document.querySelector('a[data-period="OneYear"]')
-        var ev = document.createEvent("MouseEvent");
-        ev.initEvent("click", true, true);
-        btn.dispatchEvent(ev);
-    });
 
-    setTimeout(function() {
-      xData =page.evaluate(function(){
-        return $("#DetailChart").highcharts().series[0].xData
+scrape = function(url, isin_list) {
+  data = {}
+  var nm = nightmare
+    .goto(url)
+    // .wait(4000)
+    // .cookies.clearAll()
+  index = 0
+  init = true
+  stopIndex = isin_list.length
+  searchFn = function(isin, field) {
+    var search = nm
+      .click('input[name="_search"]')
+      .insert('input[name="_search"]', isin)
+      .click('.form-submit')
+      .wait(1000)
+      // .visible('#OpenMarketDisclamer > div:nth-child(3) > div > div > button:nth-child(1)')
+      // .click('#OpenMarketDisclamer > div:nth-child(3) > div > div > button:nth-child(1)')
+      // .wait(1000)
+      .click('a[data-period="OneYear"]')
+      .evaluate(function (field) {
+        // console.log($("#DetailChart").highcharts().series[0])
+        return $("#DetailChart").highcharts().series[0][field]
+      }, field)
+      return search
+  }
+  searchEnd = function(s) {
+    s.end()
+      .then(function(result) {
+        console.log("wtf")
+        writeCsv(data)
       })
-      yData =page.evaluate(function(){
-        return $("#DetailChart").highcharts().series[0].yData
-      })
-    }, 2000)
+  }
+
+  searchIteration = function(s) {
+    s.then(function (result) {
+      key = (index===0) ? 'date' : isin_list[index-1]
+      data[key] = result
+
+      console.log(result)
+      console.log("index1",index)
+      if (index === stopIndex) {searchEnd(s)
+      } else {
+        searchIteration(searchFn(isin_list[index], 'yData'))
+        index ++
+      }
 
 
+    })
 
-    setTimeout(function() {
-      // console.log(series[0].xData)
-      var data = xData.map(function(d,i) { return [d,yData[i]]})
+  }
 
+  s = searchFn(isin_list[index], 'xData')
+  searchIteration(s)
 
-      var lineArray = [];
-      data.forEach(function (infoArray, index) {
-          var line = infoArray.join(",");
-          lineArray.push(index == 0 ? "data:text/csv;charset=utf-8," + line : line);
-      });
-      var csvContent = lineArray.join("\n");
-      fs.write("output.txt", csvContent, 'w');
-
-      page.render("tt.png")
-      setTimeout(phantom.exit(),10000)
-    },8000)
 }
-page = createPage()
-search(page, _url, isin)
+
+
+
+
+
+scrape(_url,_isin_list)
