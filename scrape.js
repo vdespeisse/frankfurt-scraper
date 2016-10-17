@@ -24,10 +24,10 @@ writeCsv = function(data) {
       lineArray.push(line)
   })
 
-  console.log("stuff happening")
+
   var csvContent = lineArray.join("\n")
-  console.log("stuff happening2")
-  fs.writeFile("output.txt", csvContent);
+
+  fs.writeFile("./output/output.txt", csvContent);
 
   console.log('done')
 }
